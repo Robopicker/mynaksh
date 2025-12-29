@@ -1,227 +1,94 @@
-# MyNaksh - Astrology Chat App
+# MyNaksh Chat
 
-A high-performance React Native chat application built for astrology consultations with AI and human astrologers. Features smooth micro-interactions, gesture-based replies, emoji reactions, and intelligent feedback systems.
+React Native chat app for astrology consultations with smooth animations and gesture interactions.
 
-## Features Implemented
+## Setup
 
-### Part A: Interactive Message Actions
-
-#### 1. Swipe-to-Reply
-- Swipe right on user messages to reveal reply icon
-- Spring animation returns bubble to original position
-- Reply preview appears above input with cancel option
-- Implemented using Reanimated 3 shared values and worklets
-
-#### 2. Message Reactions (Long-Press)
-- Long-press any message (except system events) to show emoji bar
-- Fixed emoji set: 🙏 ✨ 🌙 ❤️ 👍
-- Smooth scale and opacity animations
-- Reactions appear as badges below message bubbles
-
-### Part B: AI Feedback & Session Flow
-
-#### 1. AI Feedback System
-- Like/Dislike toggle for AI astrologer messages
-- Animated feedback chips on dislike: Inaccurate, Too Vague, Too Long
-- Staggered chip animations using withDelay
-- Visual feedback with color changes on selection
-
-#### 2. Session Termination
-- "End Chat" button in header
-- Full-screen overlay with blur effect
-- 5-star rating component with spring animations
-- Thank you message and rating capture via Alert
-
-## Tech Stack
-
-- **React Native 0.83.1** (New Architecture)
-- **Reanimated 3** - All animations run on UI thread
-- **React Native Gesture Handler** - Pan and LongPress gestures
-- **Context API** - State management
-- **TypeScript** - Type safety throughout
-
-## Installation & Setup
-
-### Prerequisites
-- Node.js >= 20
-- Xcode (for iOS)
-- Android Studio (for Android)
-- CocoaPods (for iOS)
-
-### Steps to Run
-
-1. **Install Dependencies**
 ```bash
 npm install
+cd ios && bundle install && bundle exec pod install && cd ..
+npm run ios   # or npm run android
 ```
 
-2. **iOS Setup**
-```bash
-cd ios
-bundle install
-bundle exec pod install
-cd ..
-```
+Needs Node >= 20
 
-3. **Run the App**
+## What's Built
 
-For iOS:
-```bash
-npm run ios
-```
+**Swipe to Reply** - Swipe right on any message, reply preview shows up above input
 
-For Android:
-```bash
-npm run android
-```
+**Long Press Reactions** - Hold message to pick emoji (🙏 ✨ 🌙 ❤️ 👍)
 
-## Architecture & Technical Decisions
+**AI Feedback** - Like/dislike on AI messages, get chips for feedback reasons
 
-### State Management - Context API
+**End Chat Flow** - Star rating overlay when ending session
 
-Using React Context API for state management:
-- Built-in React solution, no external dependencies
-- ChatProvider wraps the app root
-- Custom hook `useChatContext` for type-safe access
-- Simple and straightforward for this use case
+**Send Messages** - Type and send, shows timestamp
 
-Context manages:
-- Message list with reactions and feedback
-- Reply state
-- Overlay visibility
-- Rating data
+## Tech
 
-### Animation Strategy - Reanimated 3
+- React Native 0.83 with new architecture
+- Reanimated 3 for smooth 60fps animations
+- Gesture Handler for swipe/long-press
+- Context API for state
+- TypeScript
 
-All animations use Reanimated 3 to run on the UI thread:
+## How Reanimated Works Here
 
-**Swipe-to-Reply:**
-- `useSharedValue` for translateX and opacity
-- `runOnJS` to trigger state updates from worklet
-- Spring animations for natural feel
-- Pan gesture with activeOffsetX to prevent conflicts
+Using shared values and worklets to run animations on UI thread:
 
-**Long-Press Reactions:**
-- Race gesture combining LongPress and Pan
-- Scale + opacity entrance animations
-- 400ms minimum duration for intentional activation
-
-**Feedback Chips:**
-- Staggered animations using `withDelay`
-- Each chip animates in sequence (50ms intervals)
-- Spring physics for bouncy feel
-
-**End Chat Overlay:**
-- Scale and opacity animations on mount
-- Layout animations for smooth transitions
-- Disabled state handling for submit button
-
-### Gesture Handling Approach
-
-**Pan Gesture for Swipe-to-Reply:**
 ```typescript
+// Swipe gesture runs entirely on UI thread
+const translateX = useSharedValue(0);
 Gesture.Pan()
-  .activeOffsetX(10)  // Prevent accidental triggers
   .onUpdate((e) => {
-    // Clamp to 0-100 range
-    // Update translateX and icon opacity
+    translateX.value = clamp(e.translationX, 0, 80);
   })
-  .onEnd((e) => {
-    // Trigger reply if threshold exceeded
-    // Spring back to original position
+  .onEnd(() => {
+    runOnJS(setReplyingTo)(message); // Jump to JS thread for state
+    translateX.value = withSpring(0); // But animation stays on UI thread
   })
 ```
 
-**Race Gesture for Combined Interactions:**
+Everything animated (translateX, opacity, scale) updates on UI thread. Only state changes use `runOnJS` to update React state.
+
+## Gesture Handling
+
+Combined gestures with Race - you can swipe OR long-press the same message:
+
 ```typescript
-Gesture.Race(longPressGesture, panGesture)
+Gesture.Race(
+  Gesture.LongPress().minDuration(400),
+  Gesture.Pan().activeOffsetX([-5, 5])
+)
 ```
-Allows both long-press for reactions and swipe for replies on same element.
 
-### UI Thread vs JS Thread
+Pan uses small activeOffset so it doesn't interfere with scroll.
 
-**Runs on UI Thread:**
-- All gesture update handlers
-- Pan translations and opacity changes
-- Spring animations for bubble movements
-- Shared value updates
+## State Management
 
-**Runs on JS Thread:**
-- State updates (via runOnJS)
-- Zustand store mutations
-- Component re-renders
-- Alert displays
+Just Context API, keeps it simple:
+- Messages array with reactions/feedback
+- Reply state
+- Overlay toggles
+- Rating
 
-This separation ensures 60fps animations even during state updates.
+Could've used Zustand but Context is fine for this scope.
 
-### Performance Optimizations
+## Performance
 
-- Animations use `withSpring` with optimized damping/stiffness
-- Gesture worklets avoid JS bridge crossing
-- FlatList for efficient message rendering
-- Disabled gestures on system messages
-- Conditional rendering of overlays
+- Memoized components with React.memo
+- useCallback for all handlers
+- useMemo for computed values and styles
+- FlatList renders messages efficiently
+- Gestures disabled on system events
 
-## Project Structure
+## Structure
 
 ```
 src/
-├── components/
-│   ├── MessageBubble.tsx       # Main message component with gestures
-│   ├── EmojiReactionBar.tsx    # Long-press emoji selector
-│   ├── FeedbackChips.tsx       # AI dislike feedback chips
-│   ├── ReplyPreview.tsx        # Reply preview above input
-│   └── EndChatOverlay.tsx      # Session end with rating
-├── screens/
-│   └── ChatScreen.tsx          # Main chat interface
-├── context/
-│   └── ChatContext.tsx         # Context API state management
-├── types/
-│   └── chat.ts                 # TypeScript interfaces
-└── data/
-    └── mockMessages.ts         # Initial chat data
+├── components/    # MessageBubble, EmojiBar, FeedbackChips, etc.
+├── screens/       # ChatScreen
+├── context/       # ChatContext
+├── types/         # TS interfaces
+└── data/          # Mock messages
 ```
-
-## Key Design Decisions
-
-1. **Context API** - Built-in React state management, no external dependencies
-2. **Race Gesture** - Allows multiple gesture types on same element
-3. **UI Thread Animations** - Critical for smooth 60fps interactions
-4. **Shared Values** - Avoid re-renders during gesture updates
-5. **Spring Physics** - Natural, organic feel vs linear timing
-6. **Staggered Animations** - Draws attention, feels polished
-7. **Conditional Gestures** - Disabled on system messages for clarity
-
-## Trade-offs & Considerations
-
-**Pros:**
-- Smooth 60fps animations on UI thread
-- No external state management dependencies
-- Type-safe codebase with custom hooks
-- Scalable component structure
-
-**Cons:**
-- Context re-renders all consumers on state change
-- Reanimated has learning curve for worklets
-- More complex than basic animations
-- Gesture conflicts require careful handling
-
-## Future Enhancements
-
-- Message send functionality
-- Real-time typing indicators
-- Image/file attachments
-- Push notifications
-- Persistence with AsyncStorage
-- Haptic feedback on gestures
-- Sound effects for interactions
-
-## Notes
-
-This is a technical demonstration focusing on:
-- Modern React Native patterns
-- Smooth UI feedback loops
-- Gesture-driven interactions
-- Performance optimization
-
-The implementation prioritizes correctness and smoothness over feature completeness.
